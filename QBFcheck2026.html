@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>漢方 気・血・水 体質チェック</title>
+<style>
+  :root {
+    --bg: #faf8f4;
+    --card: #ffffff;
+    --text: #2b2b2b;
+    --muted: #777;
+    --line: #e4dfd5;
+    --accent: #8a5a2b;
+    --hit: #b3261e;
+    --checked: #f6ede2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+    line-height: 1.6;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 8px; color: var(--accent); }
+  h2 { font-size: 18px; margin: 28px 0 10px; }
+  p.lead { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+
+  .name-row { margin: 16px 0; }
+  .name-row label { font-size: 14px; color: var(--muted); display: block; margin-bottom: 4px; }
+  .name-row input {
+    width: 100%; padding: 10px 12px; font-size: 16px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--card);
+  }
+
+  .q-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+  .q-list label {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px;
+    cursor: pointer; user-select: none; font-size: 16px;
+  }
+  .q-list input { width: 20px; height: 20px; accent-color: var(--accent); flex-shrink: 0; }
+  .q-list label:has(input:checked) { background: var(--checked); border-color: var(--accent); }
+  .q-num { color: var(--muted); font-size: 13px; min-width: 2.2em; }
+
+  .bar {
+    position: sticky; bottom: 0; margin-top: 20px;
+    background: var(--bg); padding: 12px 0;
+    display: flex; gap: 10px; align-items: center;
+    border-top: 1px solid var(--line);
+  }
+  .count { font-size: 14px; color: var(--muted); flex: 1; }
+  button {
+    font-size: 16px; padding: 10px 18px; border-radius: 8px;
+    border: 1px solid var(--accent); cursor: pointer; font-family: inherit;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-sub { background: var(--card); color: var(--accent); }
+
+  #result { display: none; }
+  .types {
+    font-size: 22px; font-weight: bold; color: var(--hit);
+    padding: 14px 16px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px;
+  }
+  table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 15px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; }
+  th { background: #f1ece3; font-weight: normal; font-size: 13px; color: var(--muted); }
+  td.num, td.center { text-align: center; white-space: nowrap; }
+  /* 体質ごとの色：該当なし＝薄い色・通常、該当＝濃い色・ボールド */
+  td.ty, td.score { font-size: 17px; color: var(--c-light); }
+  tr.hit td.ty, tr.hit td.score { font-weight: bold; color: var(--c-dark); }
+  tr.hit td.judge { font-weight: bold; color: var(--c-dark); }
+  .gauge { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+  .gauge span { display: block; height: 100%; background: var(--c-light); }
+  tr.hit .gauge span { background: var(--c-dark); }
+  @media print {
+    .gauge, .gauge span { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+  ul.symptoms { padding-left: 1.4em; margin: 0; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 28px; }
+  .result-meta { color: var(--muted); font-size: 14px; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+
+  @media print {
+    body { background: #fff; }
+    #form, .actions { display: none !important; }
+    #result { display: block !important; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <section id="form">
+    <h1>漢方 気・血・水 体質チェック</h1>
+    <p class="lead">最近の自分に当てはまる項目をすべて選んで「結果を見る」を押してください。入力内容はどこにも送信・保存されません。</p>
+
+    <div class="name-row">
+      <label for="name">お名前（任意・結果の印刷用）</label>
+      <input id="name" type="text" autocomplete="off">
+    </div>
+
+    <ul class="q-list" id="questions"></ul>
+
+    <div class="bar">
+      <span class="count" id="count">0 / 35 項目</span>
+      <button class="btn-sub" type="button" onclick="resetAll()">クリア</button>
+      <button class="btn-primary" type="button" onclick="showResult()">結果を見る</button>
+    </div>
+  </section>
+
+  <section id="result">
+    <h1>体質チェック 結果</h1>
+    <p class="result-meta" id="meta"></p>
+
+    <h2>あなたの体質（閾値以上＝該当）</h2>
+    <div class="types" id="types"></div>
+
+    <h2>点数</h2>
+    <table>
+      <thead><tr><th>体質</th><th>点数</th><th>閾値</th><th>判定</th></tr></thead>
+      <tbody id="scoreRows"></tbody>
+    </table>
+
+    <h2>あてはまった症状</h2>
+    <div id="symptoms"></div>
+
+    <div class="actions">
+      <button class="btn-primary" type="button" onclick="window.print()">印刷 / PDF保存</button>
+      <button class="btn-sub" type="button" onclick="backToForm()">回答を修正する</button>
+      <button class="btn-sub" type="button" onclick="resetAll(); backToForm();">最初からやり直す</button>
+    </div>
+
+    <p class="note">※ このチェックは漢方医学の学習用であり、医学的診断ではありません。閾値は大学生での集計結果を基準にしており、全年齢にあてはまるわけではありません。</p>
+  </section>
+</main>
+
+<script>
+// 6 体質の並び順
+var TYPES = ['気虚', '血虚', '陰虚', '気滞', '瘀血', '水滞'];
+
+// 「この点数以上でその体質あり」と判定する閾値
+var THRESHOLDS = { '気虚': 9, '血虚': 7, '陰虚': 9, '気滞': 9, '瘀血': 3, '水滞': 9 };
+
+// 35 の質問項目と各体質への配点
+var QUESTIONS = [
+  { t: '疲れやすい',                   s: { '気虚': 8, '水滞': 6 } },
+  { t: '力が入らない',                 s: { '気虚': 8 } },
+  { t: '気力がない',                   s: { '気虚': 8 } },
+  { t: '息切れ',                       s: { '気虚': 6 } },
+  { t: '汗をかきやすい',               s: { '気虚': 6, '水滞': 6 } },
+  { t: '食欲がない',                   s: { '気虚': 6, '瘀血': 4 } },
+  { t: '下痢しやすい',                 s: { '気虚': 4, '水滞': 4 } },
+  { t: '胸やお腹が張って苦しい',       s: { '気滞': 6 } },
+  { t: 'おならやゲップが出やすい',     s: { '気滞': 6 } },
+  { t: 'イライラして怒り易い',         s: { '気滞': 10, '瘀血': 4 } },
+  { t: '緊張し易い',                   s: { '気滞': 6 } },
+  { t: '目が疲れやすい',               s: { '血虚': 6, '気滞': 4 } },
+  { t: '肩こり',                       s: { '気滞': 4, '瘀血': 4 } },
+  { t: '月経不順',                     s: { '気滞': 4, '瘀血': 4 } },
+  { t: '顔色が青白い',                 s: { '気虚': 2, '血虚': 6 } },
+  { t: '不眠',                         s: { '血虚': 4, '陰虚': 4, '気滞': 4 } },
+  { t: '動悸',                         s: { '血虚': 4 } },
+  { t: '目がかすみやすい',             s: { '血虚': 6, '陰虚': 4 } },
+  { t: '髪・爪・皮膚が乾燥する',       s: { '血虚': 4, '陰虚': 2 } },
+  { t: 'こむら返り・足がつる',         s: { '血虚': 4 } },
+  { t: '刺すような痛み',               s: { '瘀血': 12 } },
+  { t: '痛い場所がハッキリとしている', s: { '瘀血': 8 } },
+  { t: '唇・皮膚が青紫色になる',       s: { '瘀血': 8 } },
+  { t: '出血症状',                     s: { '気虚': 2, '瘀血': 8 } },
+  { t: '口・喉・皮膚が乾燥する',       s: { '血虚': 4, '陰虚': 6 } },
+  { t: '便が乾燥する',                 s: { '血虚': 4, '陰虚': 6 } },
+  { t: '手足がほてる',                 s: { '陰虚': 10, '瘀血': 2 } },
+  { t: '寝汗',                         s: { '陰虚': 10 } },
+  { t: '痩せている',                   s: { '血虚': 4, '陰虚': 4 } },
+  { t: '頭・体が重だるい',             s: { '水滞': 6 } },
+  { t: 'むくむ',                       s: { '水滞': 8 } },
+  { t: '胃もたれ',                     s: { '水滞': 4 } },
+  { t: '胃のつかえ',                   s: { '瘀血': 4, '水滞': 4 } },
+  { t: '吐き気',                       s: { '瘀血': 2, '水滞': 4 } },
+  { t: 'めまい',                       s: { '血虚': 4, '水滞': 4 } }
+];
+
+// 体質ごとの色（light＝該当なし、dark＝該当）
+var GREEN = { light: '#8cc296', dark: '#1e7a34' };
+var RED   = { light: '#e59a94', dark: '#b3261e' };
+var BLUE  = { light: '#8db3de', dark: '#1f5fa8' };
+var COLORS = { '気虚': GREEN, '気滞': GREEN, '血虚': RED, '瘀血': RED, '陰虚': BLUE, '水滞': BLUE };
+
+// 各体質の満点（ゲージ表示用）
+var MAX = {};
+TYPES.forEach(function (ty) { MAX[ty] = 0; });
+QUESTIONS.forEach(function (q) { for (var ty in q.s) MAX[ty] += q.s[ty]; });
+
+function esc(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// 質問一覧を描画
+(function renderQuestions() {
+  var html = QUESTIONS.map(function (q, i) {
+    return '<li><label><input type="checkbox" data-i="' + i + '">' +
+      '<span class="q-num">' + (i + 1) + '.</span><span>' + esc(q.t) + '</span></label></li>';
+  }).join('');
+  var ul = document.getElementById('questions');
+  ul.innerHTML = html;
+  ul.addEventListener('change', updateCount);
+})();
+
+function getAnswers() {
+  var boxes = document.querySelectorAll('#questions input');
+  return Array.prototype.map.call(boxes, function (b) { return b.checked; });
+}
+
+function updateCount() {
+  var n = getAnswers().filter(Boolean).length;
+  document.getElementById('count').textContent = n + ' / ' + QUESTIONS.length + ' 項目';
+}
+
+function computeScores(answers) {
+  var scores = {};
+  TYPES.forEach(function (ty) { scores[ty] = 0; });
+  QUESTIONS.forEach(function (q, i) {
+    if (answers[i]) for (var ty in q.s) scores[ty] += q.s[ty];
+  });
+  return scores;
+}
+
+function showResult() {
+  var answers = getAnswers();
+  var scores = computeScores(answers);
+  // 該当した体質を点数の高い順に並べる（同点は元の順）
+  var matchedTypes = TYPES.filter(function (ty) { return scores[ty] >= THRESHOLDS[ty]; })
+    .sort(function (a, b) {
+      return (scores[b] - scores[a]) || (TYPES.indexOf(a) - TYPES.indexOf(b));
+    });
+  var matchedSymptoms = QUESTIONS.filter(function (q, i) { return answers[i]; })
+    .map(function (q) { return q.t; });
+
+  var name = document.getElementById('name').value.trim();
+  var d = new Date();
+  var date = d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
+  document.getElementById('meta').textContent = (name ? name + ' 様　' : '') + date;
+
+  document.getElementById('types').innerHTML = matchedTypes.length
+    ? matchedTypes.map(function (ty) {
+        return '<span style="color:' + COLORS[ty].dark + '">' + ty + '</span>';
+      }).join(' ・ ')
+    : '<span style="color:var(--muted)">該当なし</span>';
+
+  document.getElementById('scoreRows').innerHTML = TYPES.map(function (ty) {
+    var hit = scores[ty] >= THRESHOLDS[ty];
+    var pct = Math.round(scores[ty] / MAX[ty] * 100);
+    var c = COLORS[ty];
+    return '<tr class="' + (hit ? 'hit' : '') + '" style="--c-light:' + c.light + ';--c-dark:' + c.dark + '">' +
+      '<td class="ty">' + ty + '<div class="gauge"><span style="width:' + pct + '%"></span></div></td>' +
+      '<td class="num score">' + scores[ty] + ' 点</td>' +
+      '<td class="center">' + THRESHOLDS[ty] + '</td>' +
+      '<td class="center judge">' + (hit ? '該当' : '—') + '</td></tr>';
+  }).join('');
+
+  document.getElementById('symptoms').innerHTML = matchedSymptoms.length
+    ? '<ul class="symptoms">' + matchedSymptoms.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul>'
+    : '<p>なし</p>';
+
+  document.getElementById('form').style.display = 'none';
+  document.getElementById('result').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+
+function backToForm() {
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('form').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+
+function resetAll() {
+  document.querySelectorAll('#questions input').forEach(function (b) { b.checked = false; });
+  document.getElementById('name').value = '';
+  updateCount();
+}
+</script>
+</body>
+</html>
