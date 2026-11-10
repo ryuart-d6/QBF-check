@@ -81,6 +81,11 @@
     .gauge, .gauge span { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
   ul.symptoms { padding-left: 1.4em; margin: 0; }
+  .radar-wrap { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin-top: 16px; }
+  .radar-wrap svg { display: block; width: 100%; max-width: 420px; height: auto; margin: 0 auto;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .radar-legend { text-align: center; font-size: 12px; color: var(--muted); margin: 4px 0 2px; }
+  .radar-legend .sw { display: inline-block; width: 18px; height: 0; vertical-align: middle; margin: 0 4px 0 10px; }
   .note { color: var(--muted); font-size: 12px; margin-top: 28px; }
   .result-meta { color: var(--muted); font-size: 14px; }
   .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
@@ -124,6 +129,15 @@
       <thead><tr><th>体質</th><th>点数</th><th>閾値</th><th>判定</th></tr></thead>
       <tbody id="scoreRows"></tbody>
     </table>
+
+    <div class="radar-wrap">
+      <svg id="radar" viewBox="0 0 400 380" role="img" aria-label="6体質のレーダーチャート"></svg>
+      <p class="radar-legend">
+        <span class="sw" style="border-top:2px solid #6b5a48"></span>あなたの点数
+        <span class="sw" style="border-top:2px dashed #b8ad9e"></span>閾値
+        （各体質の満点に対する割合）
+      </p>
+    </div>
 
     <h2>あてはまった症状</h2>
     <div id="symptoms"></div>
@@ -263,6 +277,8 @@ function showResult() {
       '<td class="center judge">' + (hit ? '該当' : '—') + '</td></tr>';
   }).join('');
 
+  drawRadar(scores);
+
   document.getElementById('symptoms').innerHTML = matchedSymptoms.length
     ? '<ul class="symptoms">' + matchedSymptoms.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul>'
     : '<p>なし</p>';
@@ -270,6 +286,63 @@ function showResult() {
   document.getElementById('form').style.display = 'none';
   document.getElementById('result').style.display = 'block';
   window.scrollTo(0, 0);
+}
+
+// レーダーチャート（各体質の満点に対する割合で描画）
+function drawRadar(scores) {
+  var cx = 200, cy = 190, R = 130, n = TYPES.length;
+  function pt(i, r) {
+    var a = -Math.PI / 2 + i * 2 * Math.PI / n;
+    return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  }
+  function poly(vals) {
+    return vals.map(function (v, i) { var p = pt(i, R * v); return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ');
+  }
+  var out = '';
+
+  // 目盛り（25%ごと）と軸
+  [0.25, 0.5, 0.75, 1].forEach(function (f) {
+    out += '<polygon points="' + poly(TYPES.map(function () { return f; })) +
+      '" fill="none" stroke="#e4dfd5" stroke-width="1"/>';
+  });
+  TYPES.forEach(function (ty, i) {
+    var p = pt(i, R);
+    out += '<line x1="' + cx + '" y1="' + cy + '" x2="' + p[0] + '" y2="' + p[1] + '" stroke="#e4dfd5"/>';
+  });
+
+  // 閾値ライン
+  var th = TYPES.map(function (ty) { return THRESHOLDS[ty] / MAX[ty]; });
+  out += '<polygon points="' + poly(th) + '" fill="none" stroke="#b8ad9e" stroke-width="1.5" stroke-dasharray="4 3"/>';
+
+  // 点数（各体質の色で扇形に塗り分け）
+  var v = TYPES.map(function (ty) { return Math.min(scores[ty] / MAX[ty], 1); });
+  TYPES.forEach(function (ty, i) {
+    var hit = scores[ty] >= THRESHOLDS[ty];
+    var c = hit ? COLORS[ty].dark : COLORS[ty].light;
+    var p0 = pt(i, R * v[i]);
+    var pa = pt(i - 1, R * v[(i + n - 1) % n]), pb = pt(i + 1, R * v[(i + 1) % n]);
+    var pPrev = [(pa[0] + p0[0]) / 2, (pa[1] + p0[1]) / 2];
+    var pNext = [(pb[0] + p0[0]) / 2, (pb[1] + p0[1]) / 2];
+    out += '<polygon points="' + cx + ',' + cy + ' ' + pPrev.join(',') + ' ' + p0.join(',') + ' ' + pNext.join(',') +
+      '" fill="' + c + '" fill-opacity="' + (hit ? 0.35 : 0.25) + '" stroke="none"/>';
+  });
+  out += '<polygon points="' + poly(v) + '" fill="none" stroke="#6b5a48" stroke-width="2" stroke-linejoin="round"/>';
+
+  // 頂点とラベル
+  TYPES.forEach(function (ty, i) {
+    var hit = scores[ty] >= THRESHOLDS[ty];
+    var c = hit ? COLORS[ty].dark : COLORS[ty].light;
+    var p = pt(i, R * v[i]);
+    out += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (hit ? 5 : 4) + '" fill="' + c + '" stroke="#fff" stroke-width="1.5"/>';
+    var l = pt(i, R + 26);
+    var anchor = Math.abs(l[0] - cx) < 5 ? 'middle' : (l[0] > cx ? 'start' : 'end');
+    if (anchor !== 'middle') l[0] += (anchor === 'start' ? -8 : 8);
+    out += '<text x="' + l[0] + '" y="' + (l[1] + 5) + '" text-anchor="' + anchor + '" font-size="16" fill="' + c +
+      '" font-weight="' + (hit ? 'bold' : 'normal') + '">' + ty +
+      '<tspan font-size="12" dx="4">' + scores[ty] + '点</tspan></text>';
+  });
+
+  document.getElementById('radar').innerHTML = out;
 }
 
 function backToForm() {
